@@ -38,8 +38,12 @@
 
     // Main variables
     let camera, scene, renderer, controllers = [], xrSession = null, raycaster, tempMatrix, videoPanel;
-    let isExitAnimationPlaying = false;
-    let lastClapTime = 0; // To prevent multiple clap detections
+    
+    // Collision detection for controllers
+    let collisionSpheres = [];
+    let isColliding = false;
+    let collisionStartTime = 0;
+    let clapTransitionTriggered = false;
     
     // Simple tweening utility
     class Tween {
@@ -62,6 +66,10 @@
       static easeOutElastic(t) {
         const p = 0.3;
         return Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+      }
+      
+      static easeInExpo(t) {
+        return t === 0 ? 0 : Math.pow(2, 10 * t - 10);
       }
       
       update(currentTime) {
@@ -198,6 +206,11 @@
       renderer.xr.setReferenceSpaceType('local');
       renderer.xr.setSession(session);
       
+      // Reset clap transition state
+      clapTransitionTriggered = false;
+      isColliding = false;
+      collisionStartTime = 0;
+      
       // Setup controllers
       controllers = [0, 1].map(i => {
         const controller = renderer.xr.getController(i);
@@ -215,6 +228,19 @@
         );
         controller.add(handMesh);
         
+        // Add invisible collision sphere for clap detection
+        const collisionSphere = new THREE.Mesh(
+          new THREE.SphereGeometry(0.08, 8, 8), // Larger invisible sphere for collision
+          new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            transparent: true,
+            opacity: 0.0 // Completely invisible
+          })
+        );
+        collisionSphere.userData.controllerId = i;
+        controller.add(collisionSphere);
+        collisionSpheres.push(collisionSphere);
+        
         controller.addEventListener('selectstart', onControllerSelectStart);
         controller.addEventListener('selectend', event => { event.target.userData.isSelecting = false; });
         scene.add(controller);
@@ -227,7 +253,7 @@
       
       renderer.setAnimationLoop(render);
       session.addEventListener('end', onSessionEnd);
-      updateStatus('Video Panels ready! Tap to advance. Clap hands to exit.');
+      updateStatus('Video Panels ready! Tap anywhere on the panel to advance or clap your hands to exit.');
     }
     
     function onSessionEnd() {
@@ -235,8 +261,13 @@
       document.getElementById('start-button').style.display = 'block';
       document.getElementById('status').style.display = 'none';
       controllers = [];
+      collisionSpheres = [];
       renderer.setAnimationLoop(null);
       xrSession = null;
+      
+      // Reset clap state
+      clapTransitionTriggered = false;
+      isColliding = false;
       
       // Clean up tweens
       tweenManager.clear();
@@ -260,8 +291,6 @@
         video.pause();
         video.volume = 0;
       });
-      
-      isExitAnimationPlaying = false;
     }
     
     function onControllerSelectStart(event) {
@@ -289,239 +318,63 @@
       }
     }
     
-    // Check if controllers are close enough to be considered a "clap"
-    function checkControllerClap() {
-      if (controllers.length < 2 || isExitAnimationPlaying) return false;
+    // Check if two spheres are colliding
+    function spheresColliding(sphere1, sphere2) {
+      // Get world positions of both spheres
+      const pos1 = new THREE.Vector3();
+      const pos2 = new THREE.Vector3();
       
-      const controller1Pos = new THREE.Vector3();
-      const controller2Pos = new THREE.Vector3();
+      sphere1.getWorldPosition(pos1);
+      sphere2.getWorldPosition(pos2);
       
-      controllers[0].getWorldPosition(controller1Pos);
-      controllers[1].getWorldPosition(controller2Pos);
+      // Calculate distance between spheres
+      const distance = pos1.distanceTo(pos2);
       
-      const distance = controller1Pos.distanceTo(controller2Pos);
+      // Get the combined radius of both spheres (accounting for scale)
+      const radius1 = sphere1.geometry.parameters.radius * sphere1.parent.scale.x;
+      const radius2 = sphere2.geometry.parameters.radius * sphere2.parent.scale.x;
       
-      // Clap detection - consider controllers close enough if within this threshold
-      const clapThreshold = 0.15;
-      const currentTime = Date.now();
-      
-      // Debounce claps to prevent multiple detections
-      if (distance < clapThreshold && currentTime - lastClapTime > 1000) {
-        lastClapTime = currentTime;
-        return true;
-      }
-      
-      return false;
-    }
-    
-    // Function to perform the exit animation (panel rushing toward camera)
-    function performExitAnimation() {
-      if (isExitAnimationPlaying) return;
-      
-      isExitAnimationPlaying = true;
-      updateStatus("Closing experience...");
-      
-      // Get camera position to calculate target
-      const cameraPosition = new THREE.Vector3();
-      camera.getWorldPosition(cameraPosition);
-      
-      // Get panel position
-      const panelPosition = new THREE.Vector3();
-      videoPanel.panelGroup.getWorldPosition(panelPosition);
-      
-      // Calculate direction vector from panel to camera
-      const direction = new THREE.Vector3().subVectors(cameraPosition, panelPosition).normalize();
-      
-      // Create visual blast effect
-      createBlastEffect(videoPanel.panelGroup.position.clone());
-      
-      // Scale up the panel for dramatic effect
-      tweenManager.add(new Tween(
-        videoPanel.panelGroup.scale, 
-        'x', 
-        videoPanel.panelGroup.scale.x, 
-        2.0, 
-        600, 
-        Tween.easeOutCubic
-      ));
-      
-      tweenManager.add(new Tween(
-        videoPanel.panelGroup.scale, 
-        'y', 
-        videoPanel.panelGroup.scale.y, 
-        2.0, 
-        600, 
-        Tween.easeOutCubic
-      ));
-      
-      // Start rush animation toward camera
-      const rushDistance = 5; // Higher value makes it go farther past the camera
-      const targetPosition = new THREE.Vector3().copy(panelPosition).add(
-        direction.multiplyScalar(rushDistance)
-      );
-      
-      // Make the panel rush toward the camera
-      const rushDuration = 700; // milliseconds
-      let elapsedTime = 0;
-      const startPosition = panelPosition.clone();
-      
-      // Cancel normal panel position updates
-      videoPanel.disablePositionUpdates = true;
-      
-      // Create custom animation for smooth rushing
-      const rushAnimation = () => {
-        if (!isExitAnimationPlaying) return;
-        
-        elapsedTime += 16; // Approximately 60fps
-        const progress = Math.min(elapsedTime / rushDuration, 1);
-        
-        // Ease-in for acceleration effect (gets faster as it approaches)
-        const easedProgress = Math.pow(progress, 2);
-        
-        // Update position
-        videoPanel.panelGroup.position.lerpVectors(
-          startPosition, 
-          targetPosition, 
-          easedProgress
-        );
-        
-        // Rotate panel during motion for added effect
-        videoPanel.panelGroup.rotation.z += 0.01;
-        
-        // End the session when very close to camera (within 0.2 units)
-        const distanceToCamera = new THREE.Vector3()
-          .subVectors(cameraPosition, videoPanel.panelGroup.position)
-          .length();
-        
-        if (progress >= 0.8) {
-          if (xrSession) {
-            xrSession.end();
-          }
-          return;
-        }
-        
-        if (progress < 1) {
-          requestAnimationFrame(rushAnimation);
-        }
-      };
-      
-      rushAnimation();
-    }
-    
-    // Create a blast effect when the panel is launched
-    function createBlastEffect(position) {
-      // Create particles for the blast
-      const particleCount = 150;
-      const particleGeometry = new THREE.BufferGeometry();
-      const particlePositions = new Float32Array(particleCount * 3);
-      const particleSizes = new Float32Array(particleCount);
-      
-      // Initialize particles in a spherical arrangement
-      for (let i = 0; i < particleCount; i++) {
-        // Create random direction
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.random() * Math.PI;
-        const radius = Math.random() * 0.2;
-        
-        // Convert to Cartesian coordinates
-        const x = radius * Math.sin(phi) * Math.cos(theta);
-        const y = radius * Math.sin(phi) * Math.sin(theta);
-        const z = radius * Math.cos(phi);
-        
-        particlePositions[i * 3] = position.x + x;
-        particlePositions[i * 3 + 1] = position.y + y;
-        particlePositions[i * 3 + 2] = position.z + z;
-        
-        // Random sizes
-        particleSizes[i] = Math.random() * 0.02 + 0.005;
-      }
-      
-      particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-      particleGeometry.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
-      
-      // Create shader material
-      const particleMaterial = new THREE.ShaderMaterial({
-        uniforms: {
-          time: { value: 0 },
-          color: { value: new THREE.Color(0x88CCFF) }
-        },
-        vertexShader: `
-          attribute float size;
-          uniform float time;
-          varying float vAlpha;
-          
-          void main() {
-            vec3 pos = position;
-            
-            // Expand outward
-            vec3 dir = normalize(pos - vec3(${position.x}, ${position.y}, ${position.z}));
-            pos += dir * time * 1.5;
-            
-            // Fade based on time
-            vAlpha = 1.0 - min(time * 0.8, 1.0);
-            
-            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-            gl_PointSize = size * (300.0 / -mvPosition.z) * (1.0 - time * 0.5);
-            gl_Position = projectionMatrix * mvPosition;
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 color;
-          varying float vAlpha;
-          
-          void main() {
-            vec2 xy = gl_PointCoord.xy - 0.5;
-            float radius = length(xy);
-            float alpha = smoothstep(0.5, 0.3, radius) * vAlpha;
-            
-            gl_FragColor = vec4(color, alpha);
-          }
-        `,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      
-      const particles = new THREE.Points(particleGeometry, particleMaterial);
-      scene.add(particles);
-      
-      // Animate particles
-      let startTime = null;
-      const duration = 1000; // ms
-      
-      const animateParticles = (timestamp) => {
-        if (startTime === null) startTime = timestamp;
-        
-        const elapsed = timestamp - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        particles.material.uniforms.time.value = progress;
-        
-        if (progress < 1) {
-          requestAnimationFrame(animateParticles);
-        } else {
-          // Clean up
-          scene.remove(particles);
-          particles.geometry.dispose();
-          particles.material.dispose();
-        }
-      };
-      
-      requestAnimationFrame(animateParticles);
+      // If distance is less than combined radius, spheres are colliding
+      return distance < (radius1 + radius2);
     }
     
     function render(timestamp) {
       // Update tweens
       tweenManager.update(timestamp);
       
-      // Check for controller clap
-      if (checkControllerClap()) {
-        performExitAnimation();
-      }
-      
       // Update video panel
-      if (videoPanel && !isExitAnimationPlaying) {
-        videoPanel.update(camera, timestamp);
+      if (videoPanel) videoPanel.update(camera, timestamp);
+      
+      // Don't process collisions if transition already triggered
+      if (!clapTransitionTriggered && collisionSpheres.length >= 2) {
+        // Check for collision between controller spheres
+        const isCurrentlyColliding = spheresColliding(collisionSpheres[0], collisionSpheres[1]);
+        
+        if (isCurrentlyColliding && !isColliding) {
+          // Collision just started
+          isColliding = true;
+          collisionStartTime = timestamp;
+        } else if (isCurrentlyColliding && isColliding) {
+          // Check if collision has lasted for 500ms (half a second)
+          if (timestamp - collisionStartTime >= 500 && !clapTransitionTriggered) {
+            // Trigger clap transition after half a second of collision
+            clapTransitionTriggered = true;
+            updateStatus("Clap detected! Exiting...");
+            
+            // Play "clap to camera" transition animation
+            videoPanel.playClapExitAnimation(() => {
+              // End the session when animation completes
+              if (xrSession) {
+                setTimeout(() => {
+                  xrSession.end();
+                }, 100);
+              }
+            });
+          }
+        } else if (!isCurrentlyColliding && isColliding) {
+          // Collision ended
+          isColliding = false;
+        }
       }
       
       // Check controller interaction
@@ -571,7 +424,6 @@
         this.videoMaterials = {};
         this.particles = null;
         this.currentAudio = null;
-        this.disablePositionUpdates = false;
         
         // Create a sequence of 10 video panels (increased from 5 to 10)
         this.sequence = [
@@ -1081,6 +933,135 @@
         });
       }
       
+      // Clap exit animation - fly panel to camera
+      playClapExitAnimation(onComplete) {
+        // Save current panel position and rotation
+        const startPosition = this.panelGroup.position.clone();
+        const startRotation = this.panelGroup.rotation.clone();
+        const startScale = this.panelGroup.scale.clone();
+        
+        // If we have current audio, start fading it out
+        if (this.currentAudio) {
+          this.fadeAudio(this.currentAudio, this.currentAudio.volume, 0, 200);
+        }
+        
+        // Prepare camera direction vector for final position
+        const cameraDirection = new THREE.Vector3(0, 0, -1);
+        cameraDirection.applyQuaternion(camera.quaternion);
+        const targetPosition = new THREE.Vector3().copy(camera.position);
+        
+        // Animate panel flying to the camera 
+        // First add some upward motion, then direct to camera
+        
+        // Step 1: Quick upward and slightly forward motion
+        tweenManager.add(new Tween(
+          this.panelGroup.position,
+          'y',
+          startPosition.y,
+          startPosition.y + 0.2,
+          300,
+          Tween.easeOutCubic,
+          () => {
+            // Step 2: Fly directly to camera (after upward motion)
+            tweenManager.add(new Tween(
+              this.panelGroup.position,
+              'x',
+              this.panelGroup.position.x,
+              targetPosition.x,
+              300,
+              Tween.easeInExpo
+            ));
+            
+            tweenManager.add(new Tween(
+              this.panelGroup.position,
+              'y',
+              this.panelGroup.position.y,
+              targetPosition.y,
+              300,
+              Tween.easeInExpo
+            ));
+            
+            tweenManager.add(new Tween(
+              this.panelGroup.position,
+              'z',
+              this.panelGroup.position.z,
+              targetPosition.z + 0.05, // Stop just before camera
+              300,
+              Tween.easeInExpo,
+              onComplete
+            ));
+            
+            // Scale up as it approaches camera
+            tweenManager.add(new Tween(
+              this.panelGroup.scale,
+              'x',
+              this.panelGroup.scale.x,
+              this.panelGroup.scale.x * 2,
+              300,
+              Tween.easeInExpo
+            ));
+            
+            tweenManager.add(new Tween(
+              this.panelGroup.scale,
+              'y',
+              this.panelGroup.scale.y,
+              this.panelGroup.scale.y * 2,
+              300,
+              Tween.easeInExpo
+            ));
+            
+            // Increase glow intensity as it flies to camera
+            this.panel.traverse(obj => {
+              if (obj.material && obj.material.uniforms && obj.material.uniforms.glowIntensity) {
+                const startGlowValue = obj.material.uniforms.glowIntensity.value;
+                const endGlowValue = 0.9; // Brighter glow
+                
+                tweenManager.add({
+                  object: obj.material.uniforms.glowIntensity,
+                  property: 'value',
+                  startValue: startGlowValue,
+                  endValue: endGlowValue,
+                  duration: 400,
+                  startTime: null,
+                  isActive: true,
+                  easing: Tween.easeInExpo,
+                  update: function(currentTime) {
+                    if (!this.isActive) return true;
+                    
+                    if (this.startTime === null) {
+                      this.startTime = currentTime;
+                    }
+                    
+                    const elapsed = currentTime - this.startTime;
+                    const progress = Math.min(elapsed / this.duration, 1);
+                    const easedProgress = this.easing(progress);
+                    
+                    this.object.value = this.startValue + (this.endValue - this.startValue) * easedProgress;
+                    
+                    if (progress >= 1) {
+                      this.isActive = false;
+                      return true;
+                    }
+                    
+                    return false;
+                  }
+                });
+              }
+            });
+          }
+        ));
+        
+        // Add some forward motion in initial step
+        tweenManager.add(new Tween(
+          this.panelGroup.position,
+          'z',
+          startPosition.z,
+          startPosition.z - 0.1,
+          300,
+          Tween.easeOutCubic
+        ));
+      }
+      
       // Fade audio to manage smooth transitions
       fadeAudio(video, fromVolume, toVolume, duration) {
         const startTime = Date.now();
@@ -1243,7 +1224,7 @@
       }
       
       update(camera, timestamp) {
-        if (!this.isActive || !this.panelGroup || !camera || this.disablePositionUpdates) return;
+        if (!this.isActive || !this.panelGroup || !camera) return;
         
         // Position panel in front of camera
         const cameraDirection = new THREE.Vector3(0, 0, -1);
