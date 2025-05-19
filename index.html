@@ -608,7 +608,7 @@
       // Enhanced particle effect with improved border positioning and animation
       createParticleEffect() {
         // Create a particle system for shiny effect behind the panel
-        const particleCount = 500; // Increased particle count for better coverage
+        const particleCount = 400; // Increased particle count for better effect
         const particleGeometry = new THREE.BufferGeometry();
         const particlePositions = new Float32Array(particleCount * 3);
         const particleSizes = new Float32Array(particleCount);
@@ -616,82 +616,41 @@
         // Position particles with emphasis on following the border of the panel
         const panelWidth = 0.7;
         const panelHeight = 0.5;
-        const borderWidth = 0.12; // Increased border width for better visibility
+        const borderWidth = 0.15; // Increased border width for better visibility
         
         for (let i = 0; i < particleCount; i++) {
           let x, y, z;
           
-          // Distribute particles - 90% along the border, 10% scattered within panel area
-          if (Math.random() < 0.9) {
+          // Distribute particles - 85% along the border, 15% scattered within panel area
+          if (Math.random() < 0.85) {
             // Create particles along the border of the panel
             const angle = Math.random() * Math.PI * 2; // Position around the perimeter
             
-            // More precise border positioning
-            if (angle < Math.PI * 0.5) {
-              // Top-right corner and edges
-              const cornerFactor = Math.random();
-              if (cornerFactor < 0.5) {
-                // Along top edge
-                x = Math.random() * panelWidth * 0.5; // From center to right edge
-                y = panelHeight * 0.5 - Math.random() * borderWidth * 0.8; // Near top edge
-              } else {
-                // Along right edge
-                x = panelWidth * 0.5 - Math.random() * borderWidth * 0.8; // Near right edge
-                y = Math.random() * panelHeight * 0.5; // From center to top edge
-              }
-            } else if (angle < Math.PI) {
-              // Top-left corner and edges
-              const cornerFactor = Math.random();
-              if (cornerFactor < 0.5) {
-                // Along top edge
-                x = -Math.random() * panelWidth * 0.5; // From center to left edge
-                y = panelHeight * 0.5 - Math.random() * borderWidth * 0.8; // Near top edge
-              } else {
-                // Along left edge
-                x = -panelWidth * 0.5 + Math.random() * borderWidth * 0.8; // Near left edge
-                y = Math.random() * panelHeight * 0.5; // From center to top edge
-              }
-            } else if (angle < Math.PI * 1.5) {
-              // Bottom-left corner and edges
-              const cornerFactor = Math.random();
-              if (cornerFactor < 0.5) {
-                // Along bottom edge
-                x = -Math.random() * panelWidth * 0.5; // From center to left edge
-                y = -panelHeight * 0.5 + Math.random() * borderWidth * 0.8; // Near bottom edge
-              } else {
-                // Along left edge
-                x = -panelWidth * 0.5 + Math.random() * borderWidth * 0.8; // Near left edge
-                y = -Math.random() * panelHeight * 0.5; // From center to bottom edge
-              }
-            } else {
-              // Bottom-right corner and edges
-              const cornerFactor = Math.random();
-              if (cornerFactor < 0.5) {
-                // Along bottom edge
-                x = Math.random() * panelWidth * 0.5; // From center to right edge
-                y = -panelHeight * 0.5 + Math.random() * borderWidth * 0.8; // Near bottom edge
-              } else {
-                // Along right edge
-                x = panelWidth * 0.5 - Math.random() * borderWidth * 0.8; // Near right edge
-                y = -Math.random() * panelHeight * 0.5; // From center to bottom edge
-              }
-            }
+            // Make particles extend further beyond the panel edges
+            const edgeOffset = 0.05 + Math.random() * 0.12; // Extend particles beyond panel edge
             
-            // Add some variation to avoid perfect lines
-            x += (Math.random() - 0.5) * 0.02;
-            y += (Math.random() - 0.5) * 0.02;
+            // Calculate position based on angle - creates an oval shape following panel dimensions
+            if (angle < Math.PI * 0.5 || angle > Math.PI * 1.5) {
+              // Top or bottom edge - extend particles further out
+              x = Math.cos(angle) * (panelWidth * 0.5 + edgeOffset * Math.random());
+              y = Math.sign(Math.sin(angle)) * (panelHeight * 0.5 + edgeOffset);
+            } else {
+              // Left or right edge - extend particles further out
+              x = Math.sign(Math.cos(angle)) * (panelWidth * 0.5 + edgeOffset);
+              y = Math.sin(angle) * (panelHeight * 0.5 + edgeOffset * Math.random());
+            }
           } else {
-            // Scattered particles within the panel area, but not too far from border
+            // Scattered particles within and slightly beyond the panel area
             const angleToCenter = Math.random() * Math.PI * 2;
-            const distanceFromCenter = 0.3 + Math.random() * 0.3; // Keep towards outer area
+            const distanceFromCenter = 0.3 + Math.random() * 0.3; // Extend beyond panel bounds
             
             x = Math.cos(angleToCenter) * distanceFromCenter * panelWidth * 0.5;
             y = Math.sin(angleToCenter) * distanceFromCenter * panelHeight * 0.5;
           }
           
-          // Vary z-depth for more visible depth effect
-          // Push particles further back from the panel
-          z = -0.05 - Math.random() * 0.15; 
+          // Increase z-depth for better visibility from camera perspective
+          // Place particles further behind the panel
+          z = -0.04 - Math.random() * 0.06; 
           
           particlePositions[i * 3] = x;
           particlePositions[i * 3 + 1] = y;
@@ -700,10 +659,10 @@
           // Larger particle sizes for better visibility
           const distFromCenter = Math.sqrt(x*x + y*y);
           const maxDist = Math.sqrt((panelWidth*0.5)*(panelWidth*0.5) + (panelHeight*0.5)*(panelHeight*0.5));
-          const sizeFactor = 0.6 + 0.4 * (distFromCenter / maxDist);
+          const sizeFactor = 0.6 + 0.6 * (distFromCenter / maxDist);
           
-          // Increased base size for better visibility
-          particleSizes[i] = (0.01 + Math.random() * 0.015) * sizeFactor;
+          // Larger base size for particles
+          particleSizes[i] = (0.008 + Math.random() * 0.016) * sizeFactor;
         }
         
         particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
@@ -725,7 +684,7 @@
               
               // Enhanced particle movement - more dynamic
               float speedFactor = size * 5.0 + 2.0;
-              float amplitude = 0.03; // Increased movement amplitude
+              float amplitude = 0.03; // Increased amplitude for more visible movement
               
               // Different frequency for each axis
               float xFreq = 1.0 + fract(position.y * 10.0) * 2.0;
@@ -733,7 +692,7 @@
               
               // Circular motion component + wave
               float angle = time * speedFactor * 0.2;
-              float radius = 0.02 * size * 5.0; // Increased radius for more movement
+              float radius = 0.015 * size * 5.0; // Increased radius
               
               // Add wave motion in x direction
               pos.x += sin(time * xFreq + position.z * 15.0) * amplitude;
@@ -745,15 +704,12 @@
               pos.x += cos(angle) * radius;
               pos.y += sin(angle) * radius;
               
-              // Add z-axis motion to create depth effect
-              pos.z += sin(time * 0.3 + position.x * 5.0) * 0.02;
-              
               // Pulsating alpha and size effect
               vAlpha = 0.4 + 0.6 * (0.5 + 0.5 * sin(time * 2.0 + length(position) * 10.0));
               
-              // Project position
+              // Project position with larger size multiplier
               vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-              gl_PointSize = size * (350.0 / -mvPosition.z) * (0.7 + 0.3 * vAlpha); // Increased base size
+              gl_PointSize = size * (350.0 / -mvPosition.z) * (0.8 + 0.2 * vAlpha);
               gl_Position = projectionMatrix * mvPosition;
             }
           `,
@@ -770,7 +726,7 @@
               float alpha = smoothstep(0.5, 0.1, radius) * vAlpha;
               
               // Output color with slight color variation based on alpha
-              vec3 finalColor = mix(color, vec3(0.7, 0.9, 1.0), vAlpha * 0.5); // Added slight blue tint
+              vec3 finalColor = mix(color, vec3(1.0, 1.0, 1.0), vAlpha * 0.4);
               gl_FragColor = vec4(finalColor, alpha);
             }
           `,
@@ -780,8 +736,6 @@
         });
         
         this.particles = new THREE.Points(particleGeometry, particleMaterial);
-        // Position particles behind panel but make them clearly visible
-        this.particles.position.z = -0.05;
         return this.particles;
       }
       
