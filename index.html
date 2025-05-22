@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NXT/WebXR</title>
+    <link rel="icon" href="favicon1.svg" type="image/svg+xml">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Include UAParser.js for device detection -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/UAParser.js/1.0.2/ua-parser.min.js"></script>
+    <style>
+        /* General Styles */
+        body {
+            background-color: black;
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Fade-out and Fade-in Animations */
+        .fade-out {
+            animation: fadeOut 0.5s ease-in-out forwards;
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Overlay Logo (Centered) */
+        #overlay-logo {
+            width: 30%;
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 20px;
+            animation: hopIn 1s ease-out;
+        }
+
+        @keyframes hopIn {
+            0% {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            100% {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* Introduction Overlay */
+        #intro-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 1);
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        /* Intro Content (Text + Logo) */
+        #intro-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            color: white;
+            max-width: 800px;
+        }
+
+        #intro-content h1 {
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+
+        #intro-content p {
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+
+        /* Bottom-Centered Buttons Container */
+        #intro-bottom-buttons {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+
+        /* Tunnel Effect Styles */
+        .tunnel-wrapper {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0; 
+            left: 0;
+            perspective: 1000px;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .tunnel-wrapper .square {
+            position: absolute;
+            top: 50%; 
+            left: 50%;
+            transform: translate(-50%, -50%) translateZ(-1000px) scale(0);
+            opacity: 0;
+            width: 200vmax;
+            height: 200vmax;
+            border: 2px solid white;
+            box-shadow: 0px 60px 140px white;
+            backface-visibility: hidden;
+            border-radius: 15%;
+            animation: move-animation 12s infinite linear;
+        }
+
+        @keyframes move-animation {
+            0% {
+                opacity: 1;
+                transform: translate(-50%, -50%) translateZ(-1000px) scale(0);
+            }
+            50% {
+                opacity: 1;
+                transform: translate(-50%, -50%) translateZ(0) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) translateZ(1000px) scale(1.5);
+            }
+        }
+
+        /* Root Variables */
+        :root {
+            --glow-hue: 222deg;
+            --shadow-hue: 180deg;
+            --spring-easing: linear(
+                0, 0.002, 0.01 0.9%, 0.038 1.8%, 0.156, 0.312 5.8%, 0.789 11.1%, 1.015 14.2%,
+                1.096, 1.157, 1.199, 1.224 20.3%, 1.231, 1.231, 1.226, 1.214 24.6%,
+                1.176 26.9%, 1.057 32.6%, 1.007 35.5%, 0.984, 0.968, 0.956, 0.949 42%,
+                0.946 44.1%, 0.95 46.5%, 0.998 57.2%, 1.007, 1.011 63.3%, 1.012 68.3%,
+                0.998 84%, 1
+            );
+            --spring-duration: 1.33s;
+        }
+
+        @property --shimmer {
+            syntax: "<angle>";
+            inherits: false;
+            initial-value: 33deg;
+        }
+
+        @keyframes shimmer {
+            0% {
+                --shimmer: 0deg;
+            }
+            100% {
+                --shimmer: 360deg;
+            }
+        }
+
+        /* Styled Button */
+        .styled-button {
+            position: relative;
+            padding: 10px 20px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border: none;
+            border-radius: 30px;
+            font-size: 18px;
+            color: white;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            transition: all var(--spring-duration) var(--spring-easing);
+            isolation: isolate;
+            box-shadow: 0 2px 3px 1px hsl(var(--glow-hue) 50% 20% / 50%),
+                inset 0 -10px 20px -10px hsla(var(--shadow-hue), 10%, 90%, 95%);
+            transform: scale(1);
+        }
+
+        .styled-button:hover:not(:active),
+        .styled-button.active {
+            transition-duration: calc(var(--spring-duration) * 0.5);
+            transform: scale(1.2);
+            box-shadow: 0 4px 8px -2px hsl(var(--glow-hue) 50% 20% / 50%),
+                inset 0 0 0 transparent;
+        }
+
+        .styled-button:active {
+            transform: scale(1.1);
+            transition-duration: calc(var(--spring-duration) * 0.5);
+        }
+
+        /* Shimmer & Glow */
+        .styled-button .shimmer {
+            position: absolute;
+            inset: -20px;
+            border-radius: inherit;
+            mask-image: conic-gradient(
+                from var(--shimmer, 0deg),
+                transparent 0%,
+                transparent 10%,
+                black 36%,
+                black 45%,
+                transparent 50%,
+                transparent 60%,
+                black 85%,
+                black 95%,
+                transparent 100%
+            );
+            mask-size: cover;
+            mix-blend-mode: plus-lighter;
+            animation: shimmer 1s linear infinite both;
+        }
+
+        .styled-button .shimmer::before,
+        .styled-button .shimmer::after {
+            transition: all 0.5s ease;
+            opacity: 0;
+            content: "";
+            border-radius: inherit;
+            position: absolute;
+            mix-blend-mode: color;
+            inset: 20px;
+            pointer-events: none;
+        }
+
+        .styled-button .shimmer::before {
+            box-shadow: 0 0 3px 2px hsl(var(--glow-hue) 20% 95%),
+                0 0 7px 4px hsl(var(--glow-hue) 20% 80%),
+                0 0 13px 4px hsl(var(--glow-hue) 50% 70%),
+                0 0 25px 5px hsl(var(--glow-hue) 100% 70%);
+            z-index: -1;
+        }
+
+        .styled-button .shimmer::after {
+            box-shadow: inset 0 0 0 1px hsl(var(--glow-hue) 70% 95%),
+                inset 0 0 2px 1px hsl(var(--glow-hue) 100% 80%),
+                inset 0 0 5px 2px hsl(var(--glow-hue) 100% 70%);
+            z-index: 2;
+        }
+
+        .styled-button .text {
+            color: white;
+        }
+
+        /* WebXR Experience Styles */
+        #webxr-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            z-index: 10;
+            display: none;
+        }
+
+        #status {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.9);
+            color: black;
+            padding: 12px 24px;
+            border-radius: 16px;
+            font-size: 16px;
+            font-weight: 500;
+            display: none;
+            z-index: 9999;
+        }
+
+        .exit-ar {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            color: black;
+            border: none;
+            border-radius: 50%;
+            width: 46px;
+            height: 46px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 9999;
+        }
+
+        .xr-active .exit-ar {
+            display: flex;
+        }
+
+        video {
+            display: block;
+            width: 1px;
+            height: 1px;
+            position: absolute;
+            opacity: 0.01;
+        }
+
+        /* Back Button */
+        #back-to-intro {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255,255,255,0.9);
+            color: black;
+            border: none;
+            border-radius: 50%;
+            width: 46px;
+            height: 46px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 9999;
+        }
+
+        .xr-active #back-to-intro {
+            display: flex;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 600px) {
+            #overlay-logo {
+                width: 50%;
+                max-width: 150px;
+            }
+
+            #intro-content h1 {
+                font-size: 24px;
+            }
+
+            #intro-content p {
+                font-size: 14px;
+            }
+
+            .styled-button {
+                font-size: 16px;
+                padding: 10px 15px;
+            }
+
+            #intro-bottom-buttons {
+                flex-direction: column;
+                gap: 20px;
+                bottom: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Introduction Overlay -->
+    <div id="intro-overlay">
+        <!-- Tunnel Effect Wrapper -->
+        <div class="tunnel-wrapper"></div>
+        
+        <!-- Intro Content (Text + Logo) -->
+        <div id="intro-content">
+            <img id="overlay-logo" src="icon2.png" alt="Logo">
+            <h1>Welcome to NXT/WebXR</h1>
+            <p>
+                <strong>No downloads, no payments—just dive right in.</strong>
+                Swipe up or down to browse through a variety of XR games and experiences.  
+                Hit 'Launch' to jump straight in. Or let the loading bar take you there automatically. 
+                Once you've finished exploring, tap back to return to continue your journey. 
+                <em>Discover, experience, repeat—the rabbit hole has no end.</em>
+            </p>
+        </div>
+
+        <!-- Bottom-Centered Buttons -->
+        <div id="intro-bottom-buttons">
+            <!-- Existing "Explore WebXR" Button -->
+            <button id="start-button" class="styled-button">
+                <span class="text">Explore WebXR</span>
+                <div class="shimmer"></div>
+            </button>
+            <!-- "Open on Quest" Button (only shows on non-Quest devices) -->
+            <button id="open-on-quest-button" class="styled-button">
+                <span class="text">Open on Quest</span>
+                <div class="shimmer"></div>
+            </button>
+        </div>
+    </div>
+
+    <!-- WebXR Experience Container -->
+    <div id="webxr-container">
+        <button class="exit-ar" id="exit-ar">×</button>
+        <button id="back-to-intro">←</button>
+        <div id="status"></div>
+        
+        <!-- Audio element for clap sound effect -->
+        <audio id="clap-sound" src="sound1.wav" preload="auto"></audio>
+        
+        <!-- Video elements for content -->
+        <video id="video-1" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-2" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-3" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-4" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-5" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-6" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-7" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-8" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-9" loop playsinline crossorigin="anonymous"></video>
+        <video id="video-10" loop playsinline crossorigin="anonymous"></video>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.150.1/build/three.module.js';
+
+        // Landing page functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            // ---- TUNNEL EFFECT CODE ----
+            const tunnelWrapper = document.querySelector('.tunnel-wrapper');
+            const squareCount = 6;
+            const animationDuration = 10000;
+
+            for (let i = 0; i < squareCount; i++) {
+                const square = document.createElement('div');
+                square.classList.add('square');
+                const delay = i * (animationDuration / squareCount);
+                square.style.animationDelay = `${delay}ms`;
+                tunnelWrapper.appendChild(square);
+            }
+
+            // ---- DOM Elements ----
+            const introOverlay = document.getElementById('intro-overlay');
+            const startButton = document.getElementById('start-button');
+            const openOnQuestButton = document.getElementById('open-on-quest-button');
+            const webxrContainer = document.getElementById('webxr-container');
+            const backToIntroButton = document.getElementById('back-to-intro');
+
+            // Device detection for Quest
+            function isQuestHeadset() {
+                const parser = new UAParser();
+                const result = parser.getResult();
+                const browserName = result.browser.name || '';
+                const deviceModel = result.device.model || '';
+                const isOculusBrowser = browserName.includes('OculusBrowser');
+                const isQuestDevice = deviceModel.includes('Quest');
+                return isOculusBrowser || isQuestDevice;
+            }
+
+            function sendLinkToQuest(linkUrl) {
+                if (!linkUrl.startsWith('https://')) {
+                    alert('Error: The URL must start with "https://".');
+                    return;
+                }
+                const encodedUrl = encodeURIComponent(linkUrl);
+                const webLaunchEndpoint = `https://www.oculus.com/open_url/?url=${encodedUrl}`;
+                window.location.href = webLaunchEndpoint;
+            }
+
+            function initializePage() {
+                if (isQuestHeadset()) {
+                    openOnQuestButton.style.display = 'none';
+                } else {
+                    openOnQuestButton.addEventListener('click', function() {
+                        sendLinkToQuest(window.location.href);
+                    });
+                }
+            }
+            initializePage();
+
+            // Start button: directly start WebXR session
+            startButton.addEventListener('click', () => {
+                introOverlay.classList.add('fade-out');
+                setTimeout(() => {
+                    introOverlay.style.display = 'none';
+                    webxrContainer.style.display = 'block';
+                    // Initialize WebXR and start AR session immediately
+                    initWebXR();
+                    setTimeout(() => {
+                        startARSession();
+                    }, 100);
+                }, 500);
+            });
+
+            // Back to intro button
+            backToIntroButton.addEventListener('click', () => {
+                if (xrSession) {
+                    xrSession.end();
+                }
+                webxrContainer.classList.add('fade-out');
+                setTimeout(() => {
+                    webxrContainer.style.display = 'none';
+                    introOverlay.style.display = 'flex';
+                    introOverlay.classList.remove('fade-out');
+                    introOverlay.classList.add('fade-in');
+                    // Clean up WebXR
+                    cleanupWebXR();
+                }, 500);
+            });
+        });
+
+        // WebXR functionality
+        let camera, scene, renderer, controllers = [], xrSession = null, raycaster, tempMatrix, videoPanel;
+        let collisionSpheres = [];
+        let isColliding = false;
+        let collisionStartTime = 0;
+        let clapTransitionTriggered = false;
+        let currentVideoForRedirect = null;
+
+        // Simple tweening utility
+        class Tween {
+            constructor(object, property, startValue, endValue, duration, easing, onComplete) {
+                this.object = object;
+                this.property = property;
+                this.startValue = startValue;
+                this.endValue = endValue;
+                this.duration = duration;
+                this.startTime = null;
+                this.isActive = true;
+                this.easing = easing || Tween.easeOutCubic;
+                this.onComplete = onComplete;
+            }
+            
+            static easeOutCubic(t) {
+                return 1 - Math.pow(1 - t, 3);
+            }
+            
+            static easeOutElastic(t) {
+                const p = 0.3;
+                return Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+            }
+            
+            static easeInExpo(t) {
+                return t === 0 ? 0 : Math.pow(2, 10 * t - 10);
+            }
+            
+            update(currentTime) {
+                if (!this.isActive) return true;
+                
+                if (this.startTime === null) {
+                    this.startTime = currentTime;
+                }
+                
+                const elapsed = currentTime - this.startTime;
+                const progress = Math.min(elapsed / this.duration, 1);
+                const easedProgress = this.easing(progress);
+                
+                if (typeof this.property === 'string') {
+                    const value = this.startValue + (this.endValue - this.startValue) * easedProgress;
+                    this.object[this.property] = value;
+                } else if (Array.isArray(this.property)) {
+                    let target = this.object;
+                    for (let i = 0; i < this.property.length - 1; i++) {
+                        target = target[this.property[i]];
+                    }
+                    const lastProp = this.property[this.property.length - 1];
+                    const value = this.startValue + (this.endValue - this.startValue) * easedProgress;
+                    target[lastProp] = value;
+                }
+                
+                if (progress >= 1) {
+                    this.isActive = false;
+                    if (this.onComplete) this.onComplete();
+                    return true;
+                }
+                
+                return false;
+            }
+        }
+        
+        // Tween manager
+        class TweenManager {
+            constructor() {
+                this.tweens = [];
+            }
+            
+            add(tween) {
+                this.tweens.push(tween);
+                return tween;
+            }
+            
+            update(currentTime) {
+                let i = this.tweens.length;
+                while(i--) {
+                    if (this.tweens[i].update(currentTime)) {
+                        this.tweens.splice(i, 1);
+                    }
+                }
+            }
+            
+            clear() {
+                this.tweens = [];
+            }
+        }
+        
+        const tweenManager = new TweenManager();
+
+        function initWebXR() {
+            // Scene setup
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+            
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            renderer.setClearColor(0x000000, 0);
+            
+            const webxrContainer = document.getElementById('webxr-container');
+            webxrContainer.appendChild(renderer.domElement);
+
+            // Basic lighting
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+            
+            // Interaction setup
+            raycaster = new THREE.Raycaster();
+            tempMatrix = new THREE.Matrix4();
+            videoPanel = new VideoPanelSystem();
+            
+            // Event listeners
+            window.addEventListener('resize', () => {
+                if (camera) {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                }
+                if (renderer) renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            document.getElementById('exit-ar').addEventListener('click', () => { if (xrSession) xrSession.end(); });
+        }
+
+        function cleanupWebXR() {
+            if (renderer && renderer.domElement && renderer.domElement.parentNode) {
+                renderer.domElement.parentNode.removeChild(renderer.domElement);
+            }
+            
+            if (xrSession) {
+                xrSession.end();
+            }
+            
+            controllers = [];
+            collisionSpheres = [];
+            renderer = null;
+            scene = null;
+            camera = null;
+            xrSession = null;
+            tweenManager.clear();
+            
+            // Pause videos
+            document.querySelectorAll('video').forEach(video => {
+                video.pause();
+                video.volume = 0;
+            });
+        }
+
+        // Start AR session
+        function startARSession() {
+            if (!navigator.xr) {
+                updateStatus('WebXR not supported in this browser.');
+                return;
+            }
+            
+            const clapSound = document.getElementById('clap-sound');
+            clapSound.load();
+            
+            document.querySelectorAll('video').forEach(video => {
+                video.play().catch(() => {});
+                video.pause();
+                video.volume = 0.0;
+            });
+            
+            navigator.xr.isSessionSupported('immersive-ar')
+                .then(supported => {
+                    if (supported) {
+                        navigator.xr.requestSession('immersive-ar', { 
+                            requiredFeatures: ['hit-test'],
+                            optionalFeatures: ['hand-tracking'],
+                        })
+                        .then(onSessionStarted)
+                        .catch(err => updateStatus('Failed to start AR: ' + err.message));
+                    } else {
+                        updateStatus('WebXR AR not supported on this device.');
+                    }
+                });
+        }
+
+        // Handle AR session start
+        function onSessionStarted(session) {
+            xrSession = session;
+            document.body.classList.add('xr-active');
+            renderer.xr.setReferenceSpaceType('local');
+            renderer.xr.setSession(session);
+            
+            clapTransitionTriggered = false;
+            isColliding = false;
+            collisionStartTime = 0;
+            
+            // Setup controllers
+            controllers = [0, 1].map(i => {
+                const controller = renderer.xr.getController(i);
+                controller.userData.id = i;
+                controller.userData.isSelecting = false;
+                
+                const handMesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.01, 8, 8),
+                    new THREE.MeshBasicMaterial({
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: 0.4
+                    })
+                );
+                controller.add(handMesh);
+                
+                const collisionSphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.08, 8, 8),
+                    new THREE.MeshBasicMaterial({
+                        color: 0xff0000,
+                        transparent: true,
+                        opacity: 0.0
+                    })
+                );
+                collisionSphere.userData.controllerId = i;
+                controller.add(collisionSphere);
+                collisionSpheres.push(collisionSphere);
+                
+                controller.addEventListener('selectstart', onControllerSelectStart);
+                controller.addEventListener('selectend', event => { event.target.userData.isSelecting = false; });
+                scene.add(controller);
+                return controller;
+            });
+            
+            videoPanel.init(scene, camera);
+            setTimeout(() => videoPanel.startSequence(), 1000);
+            
+            renderer.setAnimationLoop(render);
+            session.addEventListener('end', onSessionEnd);
+            updateStatus('Video Panels ready! Tap anywhere on the panel to advance or clap your hands to exit.');
+        }
+        
+        function onSessionEnd() {
+            document.body.classList.remove('xr-active');
+            document.getElementById('status').style.display = 'none';
+            controllers = [];
+            collisionSpheres = [];
+            renderer.setAnimationLoop(null);
+            xrSession = null;
+            
+            clapTransitionTriggered = false;
+            isColliding = false;
+            
+            tweenManager.clear();
+            
+            while(scene.children.length > 0) { 
+                const object = scene.children[0];
+                if (object.geometry) object.geometry.dispose();
+                if (object.material) {
+                    if (Array.isArray(object.material)) {
+                        object.material.forEach(m => m.dispose());
+                    } else {
+                        object.material.dispose();
+                    }
+                }
+                scene.remove(object); 
+            }
+            
+            document.querySelectorAll('video').forEach(video => {
+                video.pause();
+                video.volume = 0;
+            });
+            
+            if (currentVideoForRedirect) {
+                setTimeout(() => {
+                    window.location.href = currentVideoForRedirect;
+                }, 200);
+            }
+        }
+        
+        function onControllerSelectStart(event) {
+            const controller = event.target;
+            controller.userData.isSelecting = true;
+            
+            tempMatrix.identity().extractRotation(controller.matrixWorld);
+            raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+            
+            const interactiveObjects = videoPanel.getInteractiveObjects();
+            const intersects = raycaster.intersectObjects(interactiveObjects, true);
+            
+            if (intersects.length > 0) {
+                let current = intersects[0].object;
+                while (current) {
+                    if (current.userData && current.userData.onClick) {
+                        current.userData.onClick();
+                        break;
+                    }
+                    current = current.parent;
+                }
+            }
+        }
+        
+        function spheresColliding(sphere1, sphere2) {
+            const pos1 = new THREE.Vector3();
+            const pos2 = new THREE.Vector3();
+            
+            sphere1.getWorldPosition(pos1);
+            sphere2.getWorldPosition(pos2);
+            
+            const distance = pos1.distanceTo(pos2);
+            
+            const radius1 = sphere1.geometry.parameters.radius * sphere1.parent.scale.x;
+            const radius2 = sphere2.geometry.parameters.radius * sphere2.parent.scale.x;
+            
+            return distance < (radius1 + radius2);
+        }
+        
+        function render(timestamp) {
+            tweenManager.update(timestamp);
+            
+            if (videoPanel) videoPanel.update(camera, timestamp);
+            
+            if (!clapTransitionTriggered && collisionSpheres.length >= 2) {
+                const isCurrentlyColliding = spheresColliding(collisionSpheres[0], collisionSpheres[1]);
+                
+                if (isCurrentlyColliding && !isColliding) {
+                    isColliding = true;
+                    collisionStartTime = timestamp;
+                } else if (isCurrentlyColliding && isColliding) {
+                    if (timestamp - collisionStartTime >= 500 && !clapTransitionTriggered) {
+                        clapTransitionTriggered = true;
+                        updateStatus("Clap detected! Exiting...");
+                        
+                        if (videoPanel) {
+                            currentVideoForRedirect = videoPanel.getCurrentVideoLink();
+                        }
+                        
+                        const clapSound = document.getElementById('clap-sound');
+                        clapSound.volume = 0.7;
+                        clapSound.play().catch(err => console.error("Error playing clap sound:", err));
+                        
+                        videoPanel.playClapExitAnimation(() => {
+                            if (xrSession) {
+                                setTimeout(() => {
+                                    xrSession.end();
+                                }, 100);
+                            }
+                        });
+                    }
+                } else if (!isCurrentlyColliding && isColliding) {
+                    isColliding = false;
+                }
+            }
+            
+            controllers.forEach(controller => {
+                if (controller.userData.isSelecting) {
+                    tempMatrix.identity().extractRotation(controller.matrixWorld);
+                    raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+                    raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+                    
+                    const interactiveObjects = videoPanel.getInteractiveObjects();
+                    const intersects = raycaster.intersectObjects(interactiveObjects, true);
+                    
+                    if (intersects.length > 0) {
+                        const object = intersects[0].object;
+                        if (object.material && !object.userData.isHovered) {
+                            object.userData.isHovered = true;
+                            if (object.scale.x === 1) {
+                                object.scale.set(1.05, 1.05, 1.05);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            renderer.render(scene, camera);
+        }
+        
+        function updateStatus(message) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = message;
+            statusElement.style.display = 'block';
+            
+            if (!message.includes('error') && !message.includes('not supported')) {
+                setTimeout(() => { statusElement.style.display = 'none'; }, 3000);
+            }
+        }
+        
+        // Video Panel System
+        class VideoPanelSystem {
+            constructor() {
+                this.panel = null;
+                this.currentIndex = 0;
+                this.isActive = false;
+                this.panelGroup = null;
+                this.videoMaterials = {};
+                this.particles = null;
+                this.currentAudio = null;
+                
+                this.videoLinks = [
+                    { filename: 'video1.mp4', link: 'https://esc.art/' },
+                    { filename: 'video2.mp4', link: 'https://brushworkvr.com/paint' },
+                    { filename: 'video3.mp4', link: 'https://moonrider.xyz/' },
+                    { filename: 'video4.mp4', link: 'https://aboveparadowski.com/' },
+                    { filename: 'video5.mp4', link: 'https://meetwol.com/' },
+                    { filename: 'video6.mp4', link: 'https://spatialfusion.io/' },
+                    { filename: 'video7.mp4', link: 'https://elysian.fun/' },
+                    { filename: 'video8.mp4', link: 'https://vhite-rabbit-xr.itch.io/mirror-mystery/' },
+                    { filename: 'video9.mp4', link: 'https://plockle.com/play' },
+                    { filename: 'video10.mp4', link: 'https://flowerbed.metademolab.com/' }
+                ];
+                
+                this.sequence = [
+                    { videoIndex: 1 },
+                    { videoIndex: 2 },
+                    { videoIndex: 3 },
+                    { videoIndex: 4 },
+                    { videoIndex: 5 },
+                    { videoIndex: 6 },
+                    { videoIndex: 7 },
+                    { videoIndex: 8 },
+                    { videoIndex: 9 },
+                    { videoIndex: 10 }
+                ];
+                
+                this.loadAssets();
+            }
+            
+            getCurrentVideoLink() {
+                if (this.currentIndex >= 0 && this.currentIndex < this.sequence.length) {
+                    const currentVideoIndex = this.sequence[this.currentIndex].videoIndex;
+                    const videoLink = this.videoLinks.find(item => {
+                        const fileNumber = parseInt(item.filename.replace('video', '').replace('.mp4', ''));
+                        return fileNumber === currentVideoIndex;
+                    });
+                    
+                    if (videoLink) {
+                        console.log(`Redirecting to: ${videoLink.link} for video ${currentVideoIndex}`);
+                        return videoLink.link;
+                    }
+                }
+                
+                return null;
+            }
+            
+            loadAssets() {
+                const setupVideo = (index, url, elementId) => {
+                    const video = document.getElementById(elementId);
+                    
+                    const videoUrl = url || `video${index}.mp4`;
+                    video.src = videoUrl;
+                    
+                    const texture = new THREE.VideoTexture(video);
+                    texture.minFilter = THREE.LinearFilter;
+                    texture.magFilter = THREE.LinearFilter;
+                    
+                    this.videoMaterials[index] = {
+                        video: video,
+                        texture: texture,
+                        material: new THREE.MeshBasicMaterial({
+                            map: texture,
+                            transparent: true,
+                            side: THREE.DoubleSide
+                        })
+                    };
+                };
+                
+                setupVideo(1, 'video1.mp4', 'video-1');
+                setupVideo(2, 'video2.mp4', 'video-2');
+                setupVideo(3, 'video3.mp4', 'video-3');
+                setupVideo(4, 'video4.mp4', 'video-4');
+                setupVideo(5, 'video5.mp4', 'video-5');
+                setupVideo(6, 'video6.mp4', 'video-6');
+                setupVideo(7, 'video7.mp4', 'video-7');
+                setupVideo(8, 'video8.mp4', 'video-8');
+                setupVideo(9, 'video9.mp4', 'video-9');
+                setupVideo(10, 'video10.mp4', 'video-10');
+            }
+            
+            init(scene, camera) {
+                this.scene = scene;
+                this.camera = camera;
+                
+                this.panelGroup = new THREE.Group();
+                this.panelGroup.position.set(0, 0, -0.6);
+                this.panelGroup.scale.set(0.5, 0.5, 0.5);
+                this.scene.add(this.panelGroup);
+                
+                this.createPanel();
+                
+                const particles = this.createParticleEffect();
+                this.panel.add(particles);
+            }
+            
+            createParticleEffect() {
+                const particleCount = 250;
+                const particleGeometry = new THREE.BufferGeometry();
+                const particlePositions = new Float32Array(particleCount * 3);
+                const particleSizes = new Float32Array(particleCount);
+                
+                const panelWidth = 0.7;
+                const panelHeight = 0.5;
+                const borderWidth = 0.08;
+                
+                for (let i = 0; i < particleCount; i++) {
+                    let x, y, z;
+                    
+                    if (Math.random() < 0.8) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const borderOffset = borderWidth * (0.5 + Math.random() * 0.5);
+                        
+                        if (angle < Math.PI * 0.5 || angle > Math.PI * 1.5) {
+                            x = Math.cos(angle) * (panelWidth * 0.5 - borderOffset * Math.random());
+                            y = Math.sign(Math.sin(angle)) * (panelHeight * 0.5 - borderOffset * 0.25);
+                        } else {
+                            x = Math.sign(Math.cos(angle)) * (panelWidth * 0.5 - borderOffset * 0.25);
+                            y = Math.sin(angle) * (panelHeight * 0.5 - borderOffset * Math.random());
+                        }
+                    } else {
+                        const angleToCenter = Math.random() * Math.PI * 2;
+                        const distanceFromCenter = Math.random() * 0.3;
+                        
+                        x = Math.cos(angleToCenter) * distanceFromCenter * panelWidth * 0.5;
+                        y = Math.sin(angleToCenter) * distanceFromCenter * panelHeight * 0.5;
+                    }
+                    
+                    z = -0.02 - Math.random() * 0.025;
+                    
+                    particlePositions[i * 3] = x;
+                    particlePositions[i * 3 + 1] = y;
+                    particlePositions[i * 3 + 2] = z;
+                    
+                    const distFromCenter = Math.sqrt(x*x + y*y);
+                    const maxDist = Math.sqrt((panelWidth*0.5)*(panelWidth*0.5) + (panelHeight*0.5)*(panelHeight*0.5));
+                    const sizeFactor = 0.5 + 0.5 * (distFromCenter / maxDist);
+                    
+                    particleSizes[i] = (0.005 + Math.random() * 0.012) * sizeFactor;
+                }
+                
+                particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+                particleGeometry.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+                
+                const particleMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0 },
+                        color: { value: new THREE.Color(0xffffff) }
+                    },
+                    vertexShader: `
+                        attribute float size;
+                        uniform float time;
+                        varying float vAlpha;
+                        
+                        void main() {
+                            vec3 pos = position;
+                            
+                            float speedFactor = size * 5.0 + 2.0;
+                            float amplitude = 0.02;
+                            
+                            float xFreq = 1.0 + fract(position.y * 10.0) * 2.0;
+                            float yFreq = 1.0 + fract(position.x * 10.0) * 2.0;
+                            
+                            float angle = time * speedFactor * 0.2;
+                            float radius = 0.01 * size * 5.0;
+                            
+                            pos.x += sin(time * xFreq + position.z * 15.0) * amplitude;
+                            pos.y += cos(time * yFreq + position.x * 15.0) * amplitude;
+                            
+                            pos.x += cos(angle) * radius;
+                            pos.y += sin(angle) * radius;
+                            
+                            vAlpha = 0.3 + 0.7 * (0.5 + 0.5 * sin(time * 2.0 + length(position) * 10.0));
+                            
+                            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                            gl_PointSize = size * (300.0 / -mvPosition.z) * (0.8 + 0.2 * vAlpha);
+                            gl_Position = projectionMatrix * mvPosition;
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform vec3 color;
+                        varying float vAlpha;
+                        
+                        void main() {
+                            vec2 xy = gl_PointCoord.xy - 0.5;
+                            float radius = length(xy);
+                            
+                            float alpha = smoothstep(0.5, 0.1, radius) * vAlpha;
+                            
+                            vec3 finalColor = mix(color, vec3(1.0, 1.0, 1.0), vAlpha * 0.4);
+                            gl_FragColor = vec4(finalColor, alpha);
+                        }
+                    `,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                });
+                
+                this.particles = new THREE.Points(particleGeometry, particleMaterial);
+                return this.particles;
+            }
+            
+            createPanel() {
+                const panel = new THREE.Group();
+                const panelWidth = 0.7;
+                const panelHeight = 0.5;
+                
+                const glowMesh = this.createGlowEffect(panelWidth, panelHeight);
+                glowMesh.position.z = -0.003;
+                panel.add(glowMesh);
+                
+                const videoGeometry = new THREE.PlaneGeometry(panelWidth, panelHeight);
+                
+                const videoMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        videoTexture: { value: null },
+                        cornerRadius: { value: 0.11 },
+                        dimensions: { value: new THREE.Vector2(panelWidth, panelHeight) }
+                    },
+                    vertexShader: `
+                        varying vec2 vUv;
+                        void main() {
+                            vUv = uv;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform sampler2D videoTexture;
+                        uniform float cornerRadius;
+                        uniform vec2 dimensions;
+                        varying vec2 vUv;
+                        
+                        float roundedRectangle(vec2 position, vec2 dimensions, float radius) {
+                            vec2 q = abs(position) - dimensions + vec2(radius);
+                            return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
+                        }
+                        
+                        void main() {
+                            vec2 position = (vUv - 0.5) * dimensions;
+                            
+                            float distToEdge = roundedRectangle(position, dimensions * 0.5, cornerRadius);
+                            
+                            float mask = 1.0 - smoothstep(-0.01, 0.01, distToEdge);
+                            
+                            vec4 videoColor = texture2D(videoTexture, vUv);
+                            
+                            if (mask < 0.01) discard;
+                            gl_FragColor = videoColor * vec4(1.0, 1.0, 1.0, mask);
+                        }
+                    `,
+                    transparent: true,
+                    side: THREE.DoubleSide
+                });
+                
+                this.videoPlane = new THREE.Mesh(videoGeometry, videoMaterial);
+                
+                this.videoPlane.userData.onClick = () => {
+                    this.showNextVideo();
+                };
+                
+                panel.add(this.videoPlane);
+                
+                this.panelGroup.add(panel);
+                this.panel = panel;
+                this.panel.visible = false;
+            }
+            
+            createGlowEffect(width, height) {
+                const glowGeometry = new THREE.PlaneGeometry(width * 1.1, height * 1.1);
+                
+                const glowMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        glowColor: { value: new THREE.Color(0xffffff) },
+                        glowIntensity: { value: 0.4 },
+                        cornerRadius: { value: 0.15 },
+                        dimensions: { value: new THREE.Vector2(width * 1.1, height * 1.1) }
+                    },
+                    vertexShader: `
+                        varying vec2 vUv;
+                        void main() {
+                            vUv = uv;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform vec3 glowColor;
+                        uniform float glowIntensity;
+                        uniform float cornerRadius;
+                        uniform vec2 dimensions;
+                        varying vec2 vUv;
+                        
+                        float roundedRectangle(vec2 position, vec2 dimensions, float radius) {
+                            vec2 q = abs(position) - dimensions + vec2(radius);
+                            return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
+                        }
+                        
+                        void main() {
+                            vec2 position = (vUv - 0.5) * dimensions;
+                            
+                            float distToEdge = roundedRectangle(position, dimensions * 0.5, cornerRadius);
+                            
+                            float glow = 1.0 - smoothstep(-0.05, 0.05, distToEdge);
+                            
+                            float outerGlow = 1.0 - smoothstep(-0.1, 0.05, distToEdge);
+                            
+                            glow = max(glow, outerGlow * 0.5);
+                            
+                            gl_FragColor = vec4(glowColor, glow * glowIntensity);
+                        }
+                    `,
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+                
+                return new THREE.Mesh(glowGeometry, glowMaterial);
+            }
+            
+            startSequence() {
+                this.isActive = true;
+                this.currentIndex = 0;
+                this.panel.visible = true;
+                
+                this.animateEntrance();
+                
+                this.showCurrentVideo();
+            }
+            
+            animateEntrance() {
+                this.panelGroup.scale.set(0.6, 0.6, 0.6);
+                this.panelGroup.position.set(0, 0.1, -0.8);
+                
+                this.panel.traverse(obj => {
+                    if (obj.material && obj.material.opacity !== undefined) {
+                        obj.material.opacity = 0;
+                    } else if (obj.material && obj.material.uniforms && obj.material.uniforms.glowIntensity) {
+                        obj.material.uniforms.glowIntensity.value = 0;
+                    }
+                });
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.scale, 
+                    'x', 
+                    0.6, 
+                    1.0, 
+                    600, 
+                    Tween.easeOutCubic
+                ));
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.scale, 
+                    'y', 
+                    0.6, 
+                    1.0, 
+                    600, 
+                    Tween.easeOutCubic
+                ));
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.position, 
+                    'y', 
+                    0.1, 
+                    0, 
+                    700, 
+                    Tween.easeOutCubic
+                ));
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.position, 
+                    'z', 
+                    -0.8, 
+                    -0.6, 
+                    700, 
+                    Tween.easeOutCubic
+                ));
+                
+                this.panel.traverse(obj => {
+                    if (obj.material) {
+                        if (obj.material.opacity !== undefined) {
+                            const targetOpacity = 1.0;
+                            
+                            tweenManager.add(new Tween(
+                                obj.material, 
+                                'opacity', 
+                                0, 
+                                targetOpacity, 
+                                800, 
+                                Tween.easeOutCubic
+                            ));
+                        } 
+                        else if (obj.material.uniforms && obj.material.uniforms.glowIntensity) {
+                            const startValue = 0;
+                            const endValue = 0.4;
+                            
+                            tweenManager.add({
+                                object: obj.material.uniforms.glowIntensity,
+                                property: 'value',
+                                startValue: startValue,
+                                endValue: endValue,
+                                duration: 1000,
+                                startTime: null,
+                                isActive: true,
+                                easing: Tween.easeOutCubic,
+                                update: function(currentTime) {
+                                    if (!this.isActive) return true;
+                                    
+                                    if (this.startTime === null) {
+                                        this.startTime = currentTime;
+                                    }
+                                    
+                                    const elapsed = currentTime - this.startTime;
+                                    const progress = Math.min(elapsed / this.duration, 1);
+                                    const easedProgress = this.easing(progress);
+                                    
+                                    this.object.value = this.startValue + (this.endValue - this.startValue) * easedProgress;
+                                    
+                                    if (progress >= 1) {
+                                        this.isActive = false;
+                                        if (this.onComplete) this.onComplete();
+                                        return true;
+                                    }
+                                    
+                                    return false;
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+            
+            playClapExitAnimation(onComplete) {
+                const startPosition = this.panelGroup.position.clone();
+                const startRotation = this.panelGroup.rotation.clone();
+                const startScale = this.panelGroup.scale.clone();
+                
+                if (this.currentAudio) {
+                    this.fadeAudio(this.currentAudio, this.currentAudio.volume, 0, 200);
+                }
+                
+                const cameraDirection = new THREE.Vector3(0, 0, -1);
+                cameraDirection.applyQuaternion(camera.quaternion);
+                const targetPosition = new THREE.Vector3().copy(camera.position);
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.position,
+                    'y',
+                    startPosition.y,
+                    startPosition.y + 0.2,
+                    300,
+                    Tween.easeOutCubic,
+                    () => {
+                        tweenManager.add(new Tween(
+                            this.panelGroup.position,
+                            'x',
+                            this.panelGroup.position.x,
+                            targetPosition.x,
+                            300,
+                            Tween.easeInExpo
+                        ));
+                        
+                        tweenManager.add(new Tween(
+                            this.panelGroup.position,
+                            'y',
+                            this.panelGroup.position.y,
+                            targetPosition.y,
+                            300,
+                            Tween.easeInExpo
+                        ));
+                        
+                        tweenManager.add(new Tween(
+                            this.panelGroup.position,
+                            'z',
+                            this.panelGroup.position.z,
+                            targetPosition.z + 0.05,
+                            300,
+                            Tween.easeInExpo,
+                            onComplete
+                        ));
+                        
+                        tweenManager.add(new Tween(
+                            this.panelGroup.scale,
+                            'x',
+                            this.panelGroup.scale.x,
+                            this.panelGroup.scale.x * 2,
+                            300,
+                            Tween.easeInExpo
+                        ));
+                        
+                        tweenManager.add(new Tween(
+                            this.panelGroup.scale,
+                            'y',
+                            this.panelGroup.scale.y,
+                            this.panelGroup.scale.y * 2,
+                            300,
+                            Tween.easeInExpo
+                        ));
+                        
+                        this.panel.traverse(obj => {
+                            if (obj.material && obj.material.uniforms && obj.material.uniforms.glowIntensity) {
+                                const startGlowValue = obj.material.uniforms.glowIntensity.value;
+                                const endGlowValue = 0.9;
+                                
+                                tweenManager.add({
+                                    object: obj.material.uniforms.glowIntensity,
+                                    property: 'value',
+                                    startValue: startGlowValue,
+                                    endValue: endGlowValue,
+                                    duration: 400,
+                                    startTime: null,
+                                    isActive: true,
+                                    easing: Tween.easeInExpo,
+                                    update: function(currentTime) {
+                                        if (!this.isActive) return true;
+                                        
+                                        if (this.startTime === null) {
+                                            this.startTime = currentTime;
+                                        }
+                                        
+                                        const elapsed = currentTime - this.startTime;
+                                        const progress = Math.min(elapsed / this.duration, 1);
+                                        const easedProgress = this.easing(progress);
+                                        
+                                        this.object.value = this.startValue + (this.endValue - this.startValue) * easedProgress;
+                                        
+                                        if (progress >= 1) {
+                                            this.isActive = false;
+                                            return true;
+                                        }
+                                        
+                                        return false;
+                                    }
+                                });
+                            }
+                        });
+                    }
+                ));
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.position,
+                    'z',
+                    startPosition.z,
+                    startPosition.z - 0.1,
+                    300,
+                    Tween.easeOutCubic
+                ));
+            }
+            
+            fadeAudio(video, fromVolume, toVolume, duration) {
+                const startTime = Date.now();
+                const fadeInterval = setInterval(() => {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    
+                    video.volume = fromVolume + (toVolume - fromVolume) * progress;
+                    
+                    if (progress >= 1) {
+                        clearInterval(fadeInterval);
+                        video.volume = toVolume;
+                    }
+                }, 16);
+                
+                return fadeInterval;
+            }
+            
+            animateExit(onComplete) {
+                if (this.currentAudio) {
+                    this.fadeAudio(this.currentAudio, this.currentAudio.volume, 0, 400);
+                }
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.scale, 
+                    'x', 
+                    this.panelGroup.scale.x, 
+                    0.6, 
+                    400, 
+                    Tween.easeOutCubic
+                ));
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.scale, 
+                    'y', 
+                    this.panelGroup.scale.y, 
+                    0.6, 
+                    400, 
+                    Tween.easeOutCubic
+                ));
+                
+                tweenManager.add(new Tween(
+                    this.panelGroup.position, 
+                    'z', 
+                    this.panelGroup.position.z, 
+                    -0.9, 
+                    500, 
+                    Tween.easeOutCubic,
+                    onComplete
+                ));
+                
+                this.panel.traverse(obj => {
+                    if (obj.material) {
+                        if (obj.material.opacity !== undefined) {
+                            tweenManager.add(new Tween(
+                                obj.material, 
+                                'opacity', 
+                                obj.material.opacity, 
+                                0, 
+                                300, 
+                                Tween.easeOutCubic
+                            ));
+                        } 
+                        else if (obj.material.uniforms && obj.material.uniforms.glowIntensity) {
+                            const startValue = obj.material.uniforms.glowIntensity.value;
+                            const endValue = 0;
+                            
+                            tweenManager.add({
+                                object: obj.material.uniforms.glowIntensity,
+                                property: 'value',
+                                startValue: startValue,
+                                endValue: endValue,
+                                duration: 300,
+                                startTime: null,
+                                isActive: true,
+                                easing: Tween.easeOutCubic,
+                                update: function(currentTime) {
+                                    if (!this.isActive) return true;
+                                    
+                                    if (this.startTime === null) {
+                                        this.startTime = currentTime;
+                                    }
+                                    
+                                    const elapsed = currentTime - this.startTime;
+                                    const progress = Math.min(elapsed / this.duration, 1);
+                                    const easedProgress = this.easing(progress);
+                                    
+                                    this.object.value = this.startValue + (this.endValue - this.startValue) * easedProgress;
+                                    
+                                    if (progress >= 1) {
+                                        this.isActive = false;
+                                        return true;
+                                    }
+                                    
+                                    return false;
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+            
+            showCurrentVideo() {
+                if (this.currentIndex >= this.sequence.length) {
+                    this.currentIndex = 0;
+                    updateStatus("Restarting video sequence...");
+                }
+                
+                const item = this.sequence[this.currentIndex];
+                
+                if (item.videoIndex && this.videoMaterials[item.videoIndex]) {
+                    const videoTexture = this.videoMaterials[item.videoIndex].texture;
+                    
+                    if (this.videoPlane && this.videoPlane.material.uniforms) {
+                        this.videoPlane.material.uniforms.videoTexture.value = videoTexture;
+                    }
+                    
+                    Object.entries(this.videoMaterials).forEach(([index, material]) => {
+                        if (parseInt(index) !== item.videoIndex && material.video) {
+                            material.video.pause();
+                            material.video.volume = 0;
+                        }
+                    });
+                    
+                    const video = this.videoMaterials[item.videoIndex].video;
+                    video.volume = 0;
+                    
+                    this.currentAudio = video;
+                    
+                    video.play().then(() => {
+                        this.fadeAudio(video, 0, 0.8, 500);
+                    }).catch(err => {
+                        console.error("Error playing video:", err);
+                        updateStatus("Tap again to enable audio");
+                    });
+                }
+            }
+            
+            showNextVideo() {
+                this.animateExit(() => {
+                    this.currentIndex++;
+                    this.showCurrentVideo();
+                    this.animateEntrance();
+                });
+            }
+            
+            update(camera, timestamp) {
+                if (!this.isActive || !this.panelGroup || !camera) return;
+                
+                const cameraDirection = new THREE.Vector3(0, 0, -1);
+                cameraDirection.applyQuaternion(camera.quaternion);
+                cameraDirection.multiplyScalar(0.8);
+                
+                const targetPosition = new THREE.Vector3().copy(camera.position).add(cameraDirection);
+                this.panelGroup.position.lerp(targetPosition, 0.25);
+                
+                this.panelGroup.lookAt(camera.position);
+                
+                if (this.sequence[this.currentIndex] && 
+                    this.sequence[this.currentIndex].videoIndex) {
+                    const videoIndex = this.sequence[this.currentIndex].videoIndex;
+                    if (this.videoMaterials[videoIndex] && this.videoMaterials[videoIndex].texture) {
+                        this.videoMaterials[videoIndex].texture.needsUpdate = true;
+                    }
+                }
+                
+                if (this.particles && this.particles.material.uniforms) {
+                    this.particles.material.uniforms.time.value = timestamp * 0.001;
+                }
+            }
+            
+            getInteractiveObjects() {
+                return this.panel ? [this.videoPlane] : [];
+            }
+        }
+    </script>
+</body>
+</html>
